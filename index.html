@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>.drawio → PNG</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #141414;
+    --border: #2a2a2a;
+    --border-bright: #3d3d3d;
+    --accent: #00e5a0;
+    --accent-dim: #00e5a020;
+    --accent-border: #00e5a040;
+    --text: #e8e8e8;
+    --text-dim: #888;
+    --text-muted: #444;
+    --error: #ff4d4d;
+    --warn: #ffa940;
+    --ok: #00e5a0;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 40px 32px;
+    max-width: 860px;
+    margin: 0 auto;
+    gap: 32px;
+  }
+
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 300;
+    line-height: 1.5;
+  }
+
+  .drop-zone {
+    border: 1.5px dashed var(--border-bright);
+    border-radius: 8px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--surface);
+    position: relative;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .drop-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+  .drop-title { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+  .drop-sub { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+
+  .file-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: none;
+  }
+  .file-list.visible { display: flex; }
+
+  .file-list-header {
+    display: grid;
+    grid-template-columns: 1fr 90px 90px 32px;
+    padding: 8px 16px;
+    background: #1a1a1a;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .file-item {
+    display: grid;
+    grid-template-columns: 1fr 90px 90px 32px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    transition: background 0.15s;
+  }
+  .file-item:last-child { border-bottom: none; }
+  .file-item:hover { background: #1a1a1a; }
+
+  .file-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 12px;
+  }
+
+  .file-size { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+  .file-status { font-family: var(--mono); font-size: 11px; }
+  .status-pending { color: var(--text-muted); }
+  .status-running { color: var(--warn); }
+  .status-done    { color: var(--ok); }
+  .status-error   { color: var(--error); }
+
+  .file-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px;
+    border-radius: 3px;
+    transition: color 0.15s;
+    font-family: var(--mono);
+    line-height: 1;
+  }
+  .file-remove:hover { color: var(--error); }
+  .file-remove:disabled { opacity: 0.2; cursor: not-allowed; }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  .btn-primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn-primary:hover { background: #00ffb3; }
+  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-ghost { background: transparent; color: var(--text-dim); border-color: var(--border-bright); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-dim); }
+  .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .btn-dl { background: transparent; color: var(--accent); border-color: var(--accent-border); }
+  .btn-dl:hover { background: var(--accent-dim); }
+  .btn-dl:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .progress-info { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: auto; }
+
+  .log-box {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    display: none;
+  }
+  .log-box.visible { display: block; }
+
+  .log-header {
+    padding: 8px 16px;
+    background: #141414;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .log-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .log-dot.stopped { animation: none; opacity: 0.3; }
+
+  .log-content {
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    max-height: 180px;
+    overflow-y: auto;
+    color: var(--text-dim);
+  }
+  .log-content::-webkit-scrollbar { width: 4px; }
+  .log-content::-webkit-scrollbar-thumb { background: var(--border-bright); }
+
+  .log-line-ok   { color: var(--ok); }
+  .log-line-err  { color: var(--error); }
+  .log-line-warn { color: var(--warn); }
+  .log-line-info { color: var(--text-dim); }
+
+  #diagrams-iframe {
+    position: fixed;
+    left: -9999px;
+    top: -9999px;
+    width: 1200px;
+    height: 900px;
+    border: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  footer {
+    margin-top: auto;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <h1>.drawio → PNG</h1>
+    <span class="badge">diagrams.net engine</span>
+  </div>
+  <p class="subtitle">
+    Convierte archivos .drawio a PNG usando el motor oficial de diagrams.net — render idéntico a la app.
+  </p>
+</header>
+
+<div class="drop-zone" id="dropZone">
+  <input type="file" id="fileInput" accept=".drawio,.xml" multiple>
+  <span class="drop-icon">⬡</span>
+  <div class="drop-title">Arrastra archivos .drawio aquí</div>
+  <div class="drop-sub">o haz click para seleccionar &mdash; múltiples archivos soportados</div>
+</div>
+
+<div class="file-list" id="fileList">
+  <div class="file-list-header">
+    <span>Archivo</span>
+    <span>Tamaño</span>
+    <span>Estado</span>
+    <span></span>
+  </div>
+  <div id="fileItems"></div>
+</div>
+
+<div class="actions" id="actions" style="display:none">
+  <button class="btn btn-primary" id="btnConvert">Convertir a PNG</button>
+  <button class="btn btn-ghost" id="btnClear">Limpiar</button>
+  <button class="btn btn-dl" id="btnDownload" disabled>⬇ Descargar ZIP</button>
+  <span class="progress-info" id="progressInfo"></span>
+</div>
+
+<div class="log-box" id="logBox">
+  <div class="log-header">
+    <div class="log-dot stopped" id="logDot"></div>
+    <span>output</span>
+  </div>
+  <div class="log-content" id="logContent"></div>
+</div>
+
+<!-- Iframe oculto — motor de render oficial de diagrams.net -->
+<iframe id="diagrams-iframe"
+  src="https://embed.diagrams.net/?embed=1&proto=json&stealth=1&spin=0&noSaveBtn=1&noExitBtn=1">
+</iframe>
+
+<footer>
+  <span>render: embed.diagrams.net (motor oficial)</span>
+  <span id="footerCount"></span>
+</footer>
+
+<script>
+const iframe      = document.getElementById('diagrams-iframe');
+const dropZone    = document.getElementById('dropZone');
+const fileInput   = document.getElementById('fileInput');
+const fileListEl  = document.getElementById('fileList');
+const fileItemsEl = document.getElementById('fileItems');
+const actionsEl   = document.getElementById('actions');
+const btnConvert  = document.getElementById('btnConvert');
+const btnClear    = document.getElementById('btnClear');
+const btnDownload = document.getElementById('btnDownload');
+const progressInfo= document.getElementById('progressInfo');
+const logBox      = document.getElementById('logBox');
+const logContent  = document.getElementById('logContent');
+const logDot      = document.getElementById('logDot');
+const footerCount = document.getElementById('footerCount');
+
+let files        = [];
+let queue        = [];
+let iframeReady  = false;
+let currentIndex = null;
+let currentState = 'idle';
+let results      = [];
+let loadTimer    = null;
+
+// ── Log ──────────────────────────────────────────────────────
+function log(msg, type = 'info') {
+  const line = document.createElement('div');
+  line.className = `log-line-${type}`;
+  const time = new Date().toLocaleTimeString('es-CL', {hour12: false});
+  line.textContent = `[${time}] ${msg}`;
+  logContent.appendChild(line);
+  logContent.scrollTop = logContent.scrollHeight;
+}
+
+// ── Drag & Drop ──────────────────────────────────────────────
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  addFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+function addFiles(newFiles) {
+  const valid = newFiles.filter(f => f.name.endsWith('.drawio') || f.name.endsWith('.xml'));
+  if (!valid.length) return;
+  valid.forEach(f => {
+    if (files.find(x => x.name === f.name)) return;
+    files.push({ file: f, name: f.name, xml: null, status: 'pending', pngData: null });
+  });
+  renderFileList();
+  fileListEl.classList.add('visible');
+  actionsEl.style.display = 'flex';
+  updateFooter();
+}
+
+function renderFileList() {
+  fileItemsEl.innerHTML = '';
+  files.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = 'file-item';
+    row.id = `file-row-${i}`;
+    const size = f.file.size < 1024 ? `${f.file.size} B`
+               : f.file.size < 1048576 ? `${(f.file.size/1024).toFixed(1)} KB`
+               : `${(f.file.size/1048576).toFixed(1)} MB`;
+    const statusLabel = { pending:'—', running:'⟳ procesando', done:'✓ listo', error:'✗ error' }[f.status];
+    const statusClass = { pending:'status-pending', running:'status-running', done:'status-done', error:'status-error' }[f.status];
+    row.innerHTML = `
+      <div class="file-name" title="${f.name}">${f.name}</div>
+      <div class="file-size">${size}</div>
+      <div class="file-status ${statusClass}">${statusLabel}</div>
+      <button class="file-remove" data-i="${i}" ${f.status === 'running' ? 'disabled' : ''}>✕</button>
+    `;
+    fileItemsEl.appendChild(row);
+  });
+  fileItemsEl.querySelectorAll('.file-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      files.splice(parseInt(btn.dataset.i), 1);
+      renderFileList();
+      if (!files.length) {
+        fileListEl.classList.remove('visible');
+        actionsEl.style.display = 'none';
+      }
+      updateFooter();
+    });
+  });
+}
+
+function updateFileStatus(i, status) {
+  files[i].status = status;
+  const row = document.getElementById(`file-row-${i}`);
+  if (!row) return;
+  const statusEl  = row.querySelector('.file-status');
+  const removeBtn = row.querySelector('.file-remove');
+  const labels  = { pending:'—', running:'⟳ procesando', done:'✓ listo', error:'✗ error' };
+  const classes = { pending:'status-pending', running:'status-running', done:'status-done', error:'status-error' };
+  statusEl.textContent = labels[status];
+  statusEl.className   = `file-status ${classes[status]}`;
+  if (removeBtn) removeBtn.disabled = status === 'running';
+}
+
+function updateFooter() {
+  footerCount.textContent = files.length ? `${files.length} archivo${files.length > 1 ? 's' : ''}` : '';
+}
+
+// ── Comunicación con iframe ───────────────────────────────────
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  let msg;
+  try { msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; }
+  catch { return; }
+
+  if (msg.event === 'init') {
+    iframeReady = true;
+    log('Motor diagrams.net listo', 'ok');
+    if (queue.length > 0 && currentState === 'idle') processNext();
+    return;
+  }
+
+  if (msg.event === 'load') {
+    if (currentState === 'loading') {
+      clearTimeout(loadTimer);
+      currentState = 'loaded';
+      log(`  diagrama cargado, solicitando export...`, 'info');
+      requestExport();
+    }
+    return;
+  }
+
+  if (msg.event === 'export') {
+    if (currentState === 'exporting') {
+      clearTimeout(loadTimer);
+      currentState = 'idle';
+      const f = files[currentIndex];
+      f.pngData = msg.data;
+      updateFileStatus(currentIndex, 'done');
+      results.push({ name: f.name.replace(/\.(drawio|xml)$/i, '.png'), dataUrl: msg.data });
+      log(`  ✓ ${f.name} → PNG generado`, 'ok');
+      processNext();
+    }
+    return;
+  }
+
+  if (msg.event === 'save' || msg.event === 'autosave') {
+    if (currentState === 'loading') {
+      clearTimeout(loadTimer);
+      currentState = 'loaded';
+      requestExport();
+    }
+  }
+});
+
+function sendToIframe(obj) {
+  iframe.contentWindow.postMessage(JSON.stringify(obj), '*');
+}
+
+function requestExport() {
+  currentState = 'exporting';
+  sendToIframe({ action: 'export', format: 'png', spin: false, scale: 2 });
+  loadTimer = setTimeout(() => {
+    if (currentState === 'exporting') {
+      log(`  ⚠ timeout, reintentando export...`, 'warn');
+      sendToIframe({ action: 'export', format: 'png', spin: false, scale: 2 });
+      loadTimer = setTimeout(() => {
+        if (currentState === 'exporting') handleError(currentIndex, 'timeout en export');
+      }, 8000);
+    }
+  }, 10000);
+}
+
+function processNext() {
+  if (queue.length === 0) { finishAll(); return; }
+  currentIndex = queue.shift();
+  const f = files[currentIndex];
+  log(`→ procesando: ${f.name}`, 'info');
+  updateFileStatus(currentIndex, 'running');
+  const done = files.filter(x => x.status === 'done').length;
+  progressInfo.textContent = `${done + 1} / ${files.length}`;
+  currentState = 'loading';
+  sendToIframe({ action: 'load', xml: f.xml });
+  loadTimer = setTimeout(() => {
+    if (currentState === 'loading') {
+      log(`  sin evento load, exportando de todos modos...`, 'warn');
+      currentState = 'loaded';
+      requestExport();
+    }
+  }, 4000);
+}
+
+function handleError(i, msg) {
+  currentState = 'idle';
+  clearTimeout(loadTimer);
+  updateFileStatus(i, 'error');
+  log(`  ✗ error en ${files[i].name}: ${msg}`, 'err');
+  processNext();
+}
+
+function finishAll() {
+  logDot.classList.add('stopped');
+  btnConvert.disabled = false;
+  btnClear.disabled   = false;
+  progressInfo.textContent = '';
+  const doneCount = files.filter(f => f.status === 'done').length;
+  const errCount  = files.filter(f => f.status === 'error').length;
+  log(`─── completado: ${doneCount} ok, ${errCount} error ───`, doneCount > 0 ? 'ok' : 'err');
+  if (results.length > 0) btnDownload.disabled = false;
+}
+
+// ── Botón Convertir ──────────────────────────────────────────
+btnConvert.addEventListener('click', async () => {
+  if (!files.length) return;
+  results = [];
+  btnDownload.disabled = true;
+  btnConvert.disabled  = true;
+  btnClear.disabled    = true;
+  logBox.classList.add('visible');
+  logDot.classList.remove('stopped');
+  logContent.innerHTML = '';
+  log('Iniciando conversión...', 'info');
+
+  for (let i = 0; i < files.length; i++) {
+    if (!files[i].xml) files[i].xml = await readFileAsText(files[i].file);
+    files[i].status  = 'pending';
+    files[i].pngData = null;
+    updateFileStatus(i, 'pending');
+  }
+
+  queue = files.map((_, i) => i);
+
+  if (!iframeReady) {
+    log('Esperando motor diagrams.net...', 'warn');
+    const wait = setInterval(() => {
+      if (iframeReady) { clearInterval(wait); processNext(); }
+    }, 300);
+  } else {
+    processNext();
+  }
+});
+
+function readFileAsText(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsText(file, 'utf-8');
+  });
+}
+
+// ── Botón Descargar ZIP ──────────────────────────────────────
+btnDownload.addEventListener('click', async () => {
+  if (!results.length) return;
+  btnDownload.disabled  = true;
+  btnDownload.textContent = '⟳ Generando ZIP...';
+  const zip = new JSZip();
+  for (const r of results) {
+    zip.file(r.name, r.dataUrl.split(',')[1], { base64: true });
+  }
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `diagramas_png_${Date.now()}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+  btnDownload.disabled    = false;
+  btnDownload.textContent = '⬇ Descargar ZIP';
+});
+
+// ── Botón Limpiar ────────────────────────────────────────────
+btnClear.addEventListener('click', () => {
+  if (btnClear.disabled) return;
+  files = []; results = []; queue = []; currentIndex = null; currentState = 'idle';
+  fileItemsEl.innerHTML = '';
+  fileListEl.classList.remove('visible');
+  actionsEl.style.display = 'none';
+  logBox.classList.remove('visible');
+  logContent.innerHTML = '';
+  btnDownload.disabled = true;
+  progressInfo.textContent = '';
+  fileInput.value = '';
+  updateFooter();
+});
+</script>
+</body>
+</html>
