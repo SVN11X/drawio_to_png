@@ -37,6 +37,23 @@
   .status-pending { color:var(--text-muted); } .status-running { color:var(--warn); } .status-done { color:var(--ok); } .status-error { color:var(--error); }
   .file-remove { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; padding:2px; border-radius:3px; transition:color .15s; font-family:var(--mono); }
   .file-remove:hover { color:var(--error); } .file-remove:disabled { opacity:.2; cursor:not-allowed; }
+
+  /* ── Selector de fondo ── */
+  .bg-selector { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .bg-label { font-family:var(--mono); font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; white-space:nowrap; }
+  .bg-options { display:flex; gap:6px; }
+  .bg-btn {
+    font-family:var(--mono); font-size:11px; padding:5px 12px; border-radius:4px;
+    border:1.5px solid var(--border-bright); cursor:pointer; transition:all .15s;
+    display:flex; align-items:center; gap:6px; background:var(--surface); color:var(--text-dim);
+  }
+  .bg-btn:hover { border-color:var(--text-dim); color:var(--text); }
+  .bg-btn.active { border-color:var(--accent); color:var(--accent); background:var(--accent-dim); }
+  .bg-swatch { width:12px; height:12px; border-radius:2px; flex-shrink:0; outline:1px solid rgba(255,255,255,0.15); }
+  .swatch-white { background:#ffffff; }
+  .swatch-dark  { background:#1e1e1e; }
+  .swatch-transparent { background: repeating-conic-gradient(#888 0% 25%, #444 0% 50%) 0 0 / 8px 8px; }
+
   .actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .btn { font-family:var(--mono); font-size:12px; font-weight:500; padding:9px 18px; border-radius:5px; border:1.5px solid transparent; cursor:pointer; transition:all .15s; letter-spacing:.3px; text-transform:uppercase; }
   .btn-primary { background:var(--accent); color:#000; border-color:var(--accent); }
@@ -79,6 +96,22 @@
   <div id="fileItems"></div>
 </div>
 
+<!-- Selector de fondo -->
+<div class="bg-selector">
+  <span class="bg-label">Fondo:</span>
+  <div class="bg-options">
+    <button class="bg-btn active" data-bg="white">
+      <span class="bg-swatch swatch-white"></span>Blanco
+    </button>
+    <button class="bg-btn" data-bg="dark">
+      <span class="bg-swatch swatch-dark"></span>Oscuro
+    </button>
+    <button class="bg-btn" data-bg="transparent">
+      <span class="bg-swatch swatch-transparent"></span>Transparente
+    </button>
+  </div>
+</div>
+
 <div class="actions" id="actions" style="display:none">
   <button class="btn btn-primary" id="btnConvert">Convertir a PNG</button>
   <button class="btn btn-ghost"   id="btnClear">Limpiar</button>
@@ -105,7 +138,20 @@ progressInfo=document.getElementById('progressInfo'),logBox=document.getElementB
 logContent=document.getElementById('logContent'),logDot=document.getElementById('logDot'),
 footerCount=document.getElementById('footerCount');
 
-let files=[],results=[];
+let files=[], results=[];
+
+// ── Selector de fondo ──────────────────────────────────────────────────────
+let selectedBg = 'white';
+const BG_MAP = { white: '#ffffff', dark: '#1e1e1e', transparent: null };
+
+document.querySelectorAll('.bg-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.bg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedBg = btn.dataset.bg;
+  });
+});
+// ──────────────────────────────────────────────────────────────────────────
 
 function log(msg,type='info'){
   const l=document.createElement('div'); l.className=`log-line-${type}`;
@@ -152,14 +198,12 @@ function updateFooter(){footerCount.textContent=files.length?`${files.length} ar
 
 function readText(file){return new Promise((r,j)=>{const fr=new FileReader();fr.onload=e=>r(e.target.result);fr.onerror=j;fr.readAsText(file,'utf-8');})}
 
-// ─── NUEVO: export via iframe postMessage ───────────────────────────────────
-// Evita el bloqueo CORS que ocurre con fetch directo a export.diagrams.net
-function drawioToPng(xml) {
+// ── Export via iframe postMessage (sin CORS) ───────────────────────────────
+function drawioToPng(xml, bgColor) {
   return new Promise((resolve, reject) => {
     const ORIGIN = 'https://embed.diagrams.net';
     const TIMEOUT_MS = 45000;
 
-    // Crear iframe oculto apuntando al embed oficial
     const iframe = document.createElement('iframe');
     iframe.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;border:none;';
     iframe.src = `${ORIGIN}/?embed=1&spin=1&proto=json&ui=min`;
@@ -169,53 +213,32 @@ function drawioToPng(xml) {
     const cleanup = () => { if (iframe.parentNode) document.body.removeChild(iframe); };
 
     const timer = setTimeout(() => {
-      if (done) return;
-      done = true; cleanup();
+      if (done) return; done = true; cleanup();
       reject(new Error('Timeout esperando respuesta del render'));
     }, TIMEOUT_MS);
 
     const handler = (evt) => {
-      // Solo mensajes del origen correcto
       if (evt.origin !== ORIGIN) return;
-      let msg;
-      try { msg = JSON.parse(evt.data); } catch { return; }
+      let msg; try { msg = JSON.parse(evt.data); } catch { return; }
 
       if (msg.event === 'init') {
-        // El iframe está listo: cargar el XML
-        iframe.contentWindow.postMessage(JSON.stringify({
-          action: 'load',
-          xml: xml,
-          autosave: 0
-        }), ORIGIN);
+        iframe.contentWindow.postMessage(JSON.stringify({ action:'load', xml, autosave:0 }), ORIGIN);
 
       } else if (msg.event === 'load') {
-        // Diagrama cargado: pedir export PNG a escala 2x
-        iframe.contentWindow.postMessage(JSON.stringify({
-          action: 'export',
-          format: 'png',
-          scale: 2,
-          border: 10
-        }), ORIGIN);
+        const payload = { action:'export', format:'png', scale:2, border:10 };
+        // null = transparente (sin pasar background)
+        if (bgColor !== null) payload.background = bgColor;
+        iframe.contentWindow.postMessage(JSON.stringify(payload), ORIGIN);
 
       } else if (msg.event === 'export') {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        window.removeEventListener('message', handler);
-        cleanup();
-        // msg.data es el data-URL en base64 del PNG
-        if (msg.data) {
-          resolve(msg.data);
-        } else {
-          reject(new Error('Export vacío: el diagrama puede estar en blanco'));
-        }
+        if (done) return; done = true;
+        clearTimeout(timer); window.removeEventListener('message', handler); cleanup();
+        if (msg.data) resolve(msg.data);
+        else reject(new Error('Export vacío: el diagrama puede estar en blanco'));
 
       } else if (msg.event === 'error') {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        window.removeEventListener('message', handler);
-        cleanup();
+        if (done) return; done = true;
+        clearTimeout(timer); window.removeEventListener('message', handler); cleanup();
         reject(new Error(msg.message || 'Error en el render'));
       }
     };
@@ -223,57 +246,56 @@ function drawioToPng(xml) {
     window.addEventListener('message', handler);
   });
 }
-// ────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────
 
 btnConvert.addEventListener('click', async () => {
   if (!files.length) return;
-  results = []; btnDownload.disabled = true; btnConvert.disabled = true; btnClear.disabled = true;
-  logBox.classList.add('visible'); logDot.classList.remove('stopped'); logContent.innerHTML = '';
-  log('Iniciando conversión...', 'info');
-  files.forEach((_, i) => setStatus(i, 'pending'));
-  let ok = 0, fail = 0;
+  results=[]; btnDownload.disabled=true; btnConvert.disabled=true; btnClear.disabled=true;
+  logBox.classList.add('visible'); logDot.classList.remove('stopped'); logContent.innerHTML='';
 
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    log(`→ ${f.name}`, 'info'); setStatus(i, 'running'); progressInfo.textContent = `${i + 1} / ${files.length}`;
+  const bgColor = BG_MAP[selectedBg];
+  const bgLabel = { white:'blanco', dark:'oscuro', transparent:'transparente' }[selectedBg];
+  log(`Iniciando conversión... (fondo: ${bgLabel})`, 'info');
+  files.forEach((_,i) => setStatus(i,'pending'));
+  let ok=0, fail=0;
+
+  for (let i=0; i<files.length; i++) {
+    const f=files[i];
+    log(`→ ${f.name}`, 'info'); setStatus(i,'running'); progressInfo.textContent=`${i+1} / ${files.length}`;
     try {
       const xml = await readText(f.file);
-      const dataUrl = await drawioToPng(xml);
-
-      // Calcular tamaño aproximado del PNG desde base64
+      const dataUrl = await drawioToPng(xml, bgColor);
       const b64 = dataUrl.split(',')[1] || '';
-      const approxKb = ((b64.length * 3) / 4 / 1024).toFixed(1);
-
-      setStatus(i, 'done');
-      results.push({ name: f.name.replace(/\.(drawio|xml)$/i, '.png'), dataUrl });
+      const approxKb = ((b64.length*3)/4/1024).toFixed(1);
+      setStatus(i,'done');
+      results.push({ name: f.name.replace(/\.(drawio|xml)$/i,'.png'), dataUrl });
       log(`  ✓ PNG ok (~${approxKb} KB)`, 'ok'); ok++;
-    } catch (err) {
-      setStatus(i, 'error');
-      log(`  ✗ ${err.message}`, 'err'); fail++;
+    } catch(err) {
+      setStatus(i,'error'); log(`  ✗ ${err.message}`, 'err'); fail++;
     }
   }
 
-  logDot.classList.add('stopped'); btnConvert.disabled = false; btnClear.disabled = false; progressInfo.textContent = '';
-  log(`─── ${ok} ok, ${fail} error ───`, ok > 0 ? 'ok' : 'err');
-  if (results.length) btnDownload.disabled = false;
+  logDot.classList.add('stopped'); btnConvert.disabled=false; btnClear.disabled=false; progressInfo.textContent='';
+  log(`─── ${ok} ok, ${fail} error ───`, ok>0?'ok':'err');
+  if (results.length) btnDownload.disabled=false;
 });
 
 btnDownload.addEventListener('click', async () => {
   if (!results.length) return;
-  btnDownload.disabled = true; btnDownload.textContent = '⟳ ZIP...';
-  const zip = new JSZip();
-  for (const r of results) zip.file(r.name, r.dataUrl.split(',')[1], { base64: true });
-  const blob = await zip.generateAsync({ type: 'blob' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-  a.download = `diagramas_png_${Date.now()}.zip`; a.click();
-  btnDownload.disabled = false; btnDownload.textContent = '⬇ Descargar ZIP';
+  btnDownload.disabled=true; btnDownload.textContent='⟳ ZIP...';
+  const zip=new JSZip();
+  for (const r of results) zip.file(r.name, r.dataUrl.split(',')[1], {base64:true});
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`diagramas_png_${Date.now()}.zip`; a.click();
+  btnDownload.disabled=false; btnDownload.textContent='⬇ Descargar ZIP';
 });
 
 btnClear.addEventListener('click', () => {
   if (btnClear.disabled) return;
-  files = []; results = []; fileItemsEl.innerHTML = ''; fileListEl.classList.remove('visible');
-  actionsEl.style.display = 'none'; logBox.classList.remove('visible'); logContent.innerHTML = '';
-  btnDownload.disabled = true; progressInfo.textContent = ''; updateFooter();
+  files=[]; results=[]; fileItemsEl.innerHTML=''; fileListEl.classList.remove('visible');
+  actionsEl.style.display='none'; logBox.classList.remove('visible'); logContent.innerHTML='';
+  btnDownload.disabled=true; progressInfo.textContent=''; updateFooter();
 });
 </script>
 </body>
