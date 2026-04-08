@@ -73,6 +73,36 @@
   .log-content::-webkit-scrollbar { width:3px; } .log-content::-webkit-scrollbar-thumb { background:var(--border-bright); }
   .log-line-ok { color:var(--ok); } .log-line-err { color:var(--error); } .log-line-warn { color:var(--warn); } .log-line-info { color:var(--text-dim); }
   footer { margin-top:auto; font-family:var(--mono); font-size:10px; color:var(--text-muted); padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; }
+
+  /* ── Sección de privacidad ── */
+  .privacy-box { border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .privacy-toggle {
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px; background:var(--surface); border:none; cursor:pointer;
+    font-family:var(--mono); font-size:11px; color:var(--text-dim); text-align:left;
+    transition:color .15s;
+  }
+  .privacy-toggle:hover { color:var(--text); }
+  .privacy-toggle-left { display:flex; align-items:center; gap:8px; }
+  .privacy-chevron { font-size:10px; transition:transform .2s; color:var(--text-muted); }
+  .privacy-chevron.open { transform:rotate(180deg); }
+  .privacy-body { display:none; padding:16px 14px; border-top:1px solid var(--border); background:#0d0d0d; }
+  .privacy-body.open { display:block; }
+  .privacy-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  @media(max-width:560px){ .privacy-grid { grid-template-columns:1fr; } }
+  .privacy-card { border:1px solid var(--border); border-radius:5px; padding:10px 12px; }
+  .privacy-card-title { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .privacy-card-title.ok  { color:var(--ok); }
+  .privacy-card-title.warn{ color:var(--warn); }
+  .privacy-card p { font-size:11px; color:var(--text-dim); line-height:1.6; }
+  .privacy-table { width:100%; border-collapse:collapse; margin-bottom:14px; }
+  .privacy-table th { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); padding:5px 10px; text-align:left; border-bottom:1px solid var(--border); }
+  .privacy-table td { font-family:var(--mono); font-size:11px; padding:7px 10px; border-bottom:1px solid var(--border); color:var(--text-dim); vertical-align:top; }
+  .privacy-table tr:last-child td { border-bottom:none; }
+  .privacy-table td:first-child { color:var(--text); }
+  .tag-ok   { color:var(--ok); }
+  .tag-warn { color:var(--warn); }
+  .privacy-note { font-size:11px; color:var(--text-muted); line-height:1.6; padding:10px 12px; border:1px solid var(--border); border-radius:5px; border-left:3px solid var(--warn); }
 </style>
 </head>
 <body>
@@ -122,6 +152,65 @@
 <div class="log-box" id="logBox">
   <div class="log-header"><div class="log-dot stopped" id="logDot"></div><span>output</span></div>
   <div class="log-content" id="logContent"></div>
+</div>
+
+<!-- Sección de privacidad -->
+<div class="privacy-box">
+  <button class="privacy-toggle" id="privacyToggle" aria-expanded="false">
+    <span class="privacy-toggle-left">🔒 Privacidad y datos — ¿qué pasa con tus archivos?</span>
+    <span class="privacy-chevron" id="privacyChevron">▼</span>
+  </button>
+  <div class="privacy-body" id="privacyBody">
+
+    <div class="privacy-grid">
+      <div class="privacy-card">
+        <div class="privacy-card-title ok">✓ Lo que NO ocurre</div>
+        <p>No hay servidor propio. No se guardan archivos. No hay cookies, analytics ni tracking. El código fuente es completamente auditable en el repositorio.</p>
+      </div>
+      <div class="privacy-card">
+        <div class="privacy-card-title warn">⚠ Lo que SÍ ocurre</div>
+        <p>El XML de tu diagrama viaja a <strong>embed.diagrams.net</strong> para ser renderizado. Es el servidor oficial de draw.io — no un servicio de terceros desconocido.</p>
+      </div>
+    </div>
+
+    <table class="privacy-table">
+      <thead>
+        <tr><th>Dato</th><th>Destino</th><th>Estado</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Contenido XML del diagrama</td>
+          <td>embed.diagrams.net (JGraph Ltd.)</td>
+          <td class="tag-warn">⚠ Se envía para render</td>
+        </tr>
+        <tr>
+          <td>Nombre del archivo</td>
+          <td>Solo tu navegador</td>
+          <td class="tag-ok">✓ Local</td>
+        </tr>
+        <tr>
+          <td>PNG resultante</td>
+          <td>Solo tu navegador</td>
+          <td class="tag-ok">✓ Local</td>
+        </tr>
+        <tr>
+          <td>Cookies / localStorage</td>
+          <td>—</td>
+          <td class="tag-ok">✓ No se usan</td>
+        </tr>
+        <tr>
+          <td>Analytics / trackers</td>
+          <td>—</td>
+          <td class="tag-ok">✓ No existen</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="privacy-note">
+      <strong>Si tus diagramas son confidenciales:</strong> considera usar la app desktop de draw.io, que exporta a PNG 100% de forma local sin ninguna conexión de red. Esta herramienta es ideal para diagramas de uso general o no sensibles.
+    </p>
+
+  </div>
 </div>
 
 <footer>
@@ -296,6 +385,16 @@ btnClear.addEventListener('click', () => {
   files=[]; results=[]; fileItemsEl.innerHTML=''; fileListEl.classList.remove('visible');
   actionsEl.style.display='none'; logBox.classList.remove('visible'); logContent.innerHTML='';
   btnDownload.disabled=true; progressInfo.textContent=''; updateFooter();
+});
+
+// ── Toggle privacidad ──────────────────────────────────────────────────────
+document.getElementById('privacyToggle').addEventListener('click', () => {
+  const body = document.getElementById('privacyBody');
+  const chevron = document.getElementById('privacyChevron');
+  const toggle = document.getElementById('privacyToggle');
+  const isOpen = body.classList.toggle('open');
+  chevron.classList.toggle('open', isOpen);
+  toggle.setAttribute('aria-expanded', isOpen);
 });
 </script>
 </body>
