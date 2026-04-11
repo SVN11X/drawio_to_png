@@ -1,5 +1,7 @@
 # .drawio → PNG Converter
 
+[![Ver en GitHub Pages](https://img.shields.io/badge/Demo-Live_Site-00e5a0?style=for-the-badge&logo=github)](https://svn11x.github.io/drawio_to_png/)
+
 Una herramienta web minimalista y de alto rendimiento para convertir archivos de **diagrams.net** (`.drawio` o `.xml`) a imágenes **PNG** de alta resolución. 
 
 A diferencia de otros convertidores, esta herramienta utiliza el **motor de renderizado oficial de draw.io** a través de su API de comunicación entre ventanas (`postMessage`), garantizando que el resultado sea 100% idéntico al que obtendrías en la aplicación de escritorio o web oficial.
